@@ -1,4 +1,11 @@
 import { z } from "zod";
+import { tokenize } from "@/lib/math/render";
+
+/** Rejects HTML tags in the text parts of MathText (math like `$a < b$` is allowed). */
+export function hasHtmlTag(value: string): boolean {
+  return tokenize(value).some((seg) => seg.kind === "text" && /<\/?[a-z!][^>]*>/i.test(seg.value));
+}
+
 
 export const idSchema = z.string().min(1).max(64).regex(/^[a-z0-9]+$/i, "ID không hợp lệ");
 export const slugSchema = z
@@ -22,14 +29,14 @@ export const mathTextSchema = (max: number) =>
     .trim()
     .min(1, "Không được để trống")
     .max(max, `Tối đa ${max} ký tự`)
-    .refine((v) => !/<\s*\/?\s*[a-z!]/i.test(v), "Không được chứa thẻ HTML");
+    .refine((v) => !hasHtmlTag(v), "Không được chứa thẻ HTML");
 
 export const optionalMathText = (max: number) =>
   z
     .string()
     .trim()
     .max(max)
-    .refine((v) => !/<\s*\/?\s*[a-z!]/i.test(v), "Không được chứa thẻ HTML")
+    .refine((v) => !hasHtmlTag(v), "Không được chứa thẻ HTML")
     .optional()
     .nullable();
 

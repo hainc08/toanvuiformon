@@ -8,6 +8,9 @@ import type { QuestionInput, QuestionStatusAction } from "@/lib/validation/quest
 import type { Prisma } from "@/generated/prisma/client";
 import type { QuestionStatus } from "@/generated/prisma/enums";
 import { audit } from "./audit.service";
+import { QUESTION_TRANSITIONS } from "@/features/questions/transitions";
+
+export { QUESTION_TRANSITIONS };
 
 export interface AdminQuestionFilter {
   q?: string;
@@ -205,18 +208,6 @@ export async function updateQuestion(id: string, input: QuestionInput, user: Ses
   await audit(user.id, "question.update", "Question", id, { version: nextVersion, contentChanged, statusChanged: needsReview });
   return { question: updated, contentChanged, sentBackToReview: needsReview };
 }
-
-type Transition = { from: QuestionStatus[]; to: QuestionStatus; permission: Parameters<typeof can>[1] };
-
-export const QUESTION_TRANSITIONS: Record<QuestionStatusAction, Transition> = {
-  submit: { from: ["DRAFT"], to: "PENDING_REVIEW", permission: "question:submit" },
-  approve: { from: ["PENDING_REVIEW"], to: "APPROVED", permission: "question:review" },
-  reject: { from: ["PENDING_REVIEW", "APPROVED"], to: "DRAFT", permission: "question:review" },
-  publish: { from: ["APPROVED"], to: "PUBLISHED", permission: "question:publish" },
-  unpublish: { from: ["PUBLISHED"], to: "APPROVED", permission: "question:publish" },
-  archive: { from: ["DRAFT", "PENDING_REVIEW", "APPROVED", "PUBLISHED"], to: "ARCHIVED", permission: "question:delete" },
-  restore: { from: ["ARCHIVED"], to: "DRAFT", permission: "question:delete" },
-};
 
 export async function changeQuestionStatus(id: string, action: QuestionStatusAction, user: SessionUser, note?: string) {
   const t = QUESTION_TRANSITIONS[action];

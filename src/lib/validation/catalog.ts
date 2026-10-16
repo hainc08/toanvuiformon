@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { idSchema, publishStatusSchema, slugSchema } from "./common";
+import { hasHtmlTag, idSchema, publishStatusSchema, slugSchema } from "./common";
 
 export const gradeUpsertSchema = z.object({
   level: z.coerce.number().int().min(1).max(12),
@@ -28,14 +28,14 @@ export const topicUpsertSchema = z.object({
     .string()
     .trim()
     .max(5_000)
-    .refine((v) => !/<\s*\/?\s*[a-z!]/i.test(v), "Không được chứa thẻ HTML")
+    .refine((v) => !hasHtmlTag(v), "Không được chứa thẻ HTML")
     .optional()
     .nullable(),
   example: z
     .string()
     .trim()
     .max(3_000)
-    .refine((v) => !/<\s*\/?\s*[a-z!]/i.test(v), "Không được chứa thẻ HTML")
+    .refine((v) => !hasHtmlTag(v), "Không được chứa thẻ HTML")
     .optional()
     .nullable(),
   sortOrder: z.coerce.number().int().min(0).max(1_000).default(0),

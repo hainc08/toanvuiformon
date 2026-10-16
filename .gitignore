@@ -13,3 +13,5 @@ next-env.d.ts
 backups/
 *.log
 .DS_Store
+playwright-report/
+test-results/

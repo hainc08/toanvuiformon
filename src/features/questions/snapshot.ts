@@ -46,7 +46,13 @@ export function parseSnapshot(value: unknown): QuestionSnapshot {
 
 /** Content fields that, when changed, require a new revision. */
 export function snapshotsDiffer(a: QuestionSnapshot, b: QuestionSnapshot): boolean {
-  return JSON.stringify({ ...a, code: "" }) !== JSON.stringify({ ...b, code: "" });
+  // Compare field by field: JSONB does not preserve key order, so JSON.stringify of the whole object is unreliable.
+  if (a.type !== b.type || a.difficulty !== b.difficulty || a.content !== b.content || a.answer !== b.answer || a.solution !== b.solution) return true;
+  if (a.options.length !== b.options.length) return true;
+  return a.options.some((o, i) => {
+    const other = b.options[i];
+    return !other || o.label !== other.label || o.content !== other.content || o.isCorrect !== other.isCorrect;
+  });
 }
 
 /** True when the short answer already begins with the option label, e.g. "**B.** $36$". */
