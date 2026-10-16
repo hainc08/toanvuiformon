@@ -25,6 +25,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  agentRules: false,
   serverExternalPackages: ["playwright-core", "pg"],
   // Font + KaTeX assets read from disk by the PDF renderer (src/lib/pdf/assets.ts).
   outputFileTracingIncludes: {

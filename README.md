@@ -18,7 +18,18 @@ Nền tảng web luyện Toán THCS miễn phí — MVP: **Toán lớp 6** (Chư
 
 Ngân hàng khởi tạo: **134 câu hỏi** tự biên soạn (Chương 1–2 trọng tâm, có cả 3 mức độ), **133 câu có kiểm chứng đáp án tự động** bằng code (`prisma/data/verify.ts`), 8 bộ đề mẫu.
 
-## Chạy local
+## Chạy local nhanh (không cần cài PostgreSQL/Docker)
+
+Yêu cầu: Node.js 22.12+ (≤ 24).
+
+```bash
+npm install
+npm run local
+```
+
+Lệnh `local` tự khởi động PostgreSQL nhúng (dữ liệu lưu ở `.local-db/`), áp dụng migrations, nạp dữ liệu Toán 6, tạo tài khoản admin lần đầu (in ra màn hình, lưu ở `.local-db/admin-login.txt`), cài Chromium cho PDF nếu thiếu, rồi chạy http://localhost:3000. Dừng bằng `Ctrl+C`. Xóa thư mục `.local-db/` để làm lại từ đầu.
+
+## Chạy local với PostgreSQL riêng
 
 Yêu cầu: Node.js 22.12+ (≤ 24), PostgreSQL 16.
 
