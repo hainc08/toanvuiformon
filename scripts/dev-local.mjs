@@ -61,6 +61,9 @@ const db = new EmbeddedPostgres({
   password: pgPassword,
   port: PG_PORT,
   persistent: true,
+  // Windows initdb otherwise picks the OS code page (e.g. WIN1252), which cannot store Vietnamese text.
+  // ICU gives Unicode case folding (case-insensitive search) without depending on OS locale names.
+  initdbFlags: ["--encoding=UTF8", "--locale-provider=icu", "--icu-locale=und", "--locale=C"],
   onLog: () => {},
 });
 
@@ -86,8 +89,18 @@ try {
   const admin = new pg.Client({ connectionString: DATABASE_URL.replace(`/${DB_NAME}?`, "/postgres?") });
   await admin.connect();
   const exists = await admin.query("SELECT 1 FROM pg_database WHERE datname = $1", [DB_NAME]);
-  if (exists.rowCount === 0) await admin.query(`CREATE DATABASE ${DB_NAME}`);
+  if (exists.rowCount === 0) await admin.query(`CREATE DATABASE ${DB_NAME} ENCODING 'UTF8' LOCALE_PROVIDER icu ICU_LOCALE 'und' LOCALE 'C' TEMPLATE template0`);
   await admin.end();
+
+  const check = new pg.Client({ connectionString: DATABASE_URL });
+  await check.connect();
+  const vi = await check
+    .query("SELECT 'Ước chung' ILIKE '%ƯỚC CHUNG%' AS ok")
+    .catch(() => ({ rows: [{ ok: false }] }));
+  await check.end();
+  if (!vi.rows[0].ok) {
+    throw new Error(`Database "${DB_NAME}" không xử lý được tiếng Việt (encoding/locale cũ). Dừng lại, xóa thư mục .local-db/ rồi chạy lại "npm run local".`);
+  }
 
   log("Áp dụng migrations…");
   await run(process.env.LOCAL_MIGRATE_CMD ?? "npx prisma migrate deploy");
