@@ -26,6 +26,16 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   serverExternalPackages: ["playwright-core", "pg"],
+  // Font + KaTeX assets read from disk by the PDF renderer (src/lib/pdf/assets.ts).
+  outputFileTracingIncludes: {
+    "/api/worksheets/**": [
+      "./node_modules/playwright-core/**/*",
+      "./node_modules/katex/dist/katex.min.css",
+      "./node_modules/katex/dist/fonts/*.woff2",
+      "./node_modules/@fontsource/be-vietnam-pro/{400,600,700}.css",
+      "./node_modules/@fontsource/be-vietnam-pro/files/*-{400,600,700}-normal.woff2",
+    ],
+  },
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },

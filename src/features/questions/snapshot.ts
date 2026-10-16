@@ -48,3 +48,8 @@ export function parseSnapshot(value: unknown): QuestionSnapshot {
 export function snapshotsDiffer(a: QuestionSnapshot, b: QuestionSnapshot): boolean {
   return JSON.stringify({ ...a, code: "" }) !== JSON.stringify({ ...b, code: "" });
 }
+
+/** True when the short answer already begins with the option label, e.g. "**B.** $36$". */
+export function answerStartsWithLabel(answer: string): boolean {
+  return /^\s*\*\*[A-F]\.\*\*/.test(answer);
+}
