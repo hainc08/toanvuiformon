@@ -1,0 +1,358 @@
+// Toán Vui — PostgreSQL schema (Prisma 7)
+// Docs: docs/DATABASE.md
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────── Enums ─────────────────────────
+
+enum UserRole {
+  ADMIN
+  EDITOR
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum Difficulty {
+  BASIC // Cơ bản
+  APPLIED // Vận dụng
+  ADVANCED // Nâng cao
+}
+
+enum QuestionType {
+  ESSAY // Tự luận
+  SINGLE_CHOICE // Trắc nghiệm một đáp án
+  SHORT_ANSWER // Điền kết quả
+  TRUE_FALSE // Đúng/sai (mở rộng)
+}
+
+enum QuestionStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum WorksheetKind {
+  CURATED // Bộ đề do quản trị viên biên soạn
+  GENERATED // Bộ đề tự tạo bởi người dùng
+}
+
+enum DownloadKind {
+  QUESTION_PDF
+  ANSWER_PDF
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+// ───────────────────────── Auth ─────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         UserRole  @default(EDITOR)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions           Session[]
+  questionsCreated   Question[]         @relation("QuestionCreatedBy")
+  questionsUpdated   Question[]         @relation("QuestionUpdatedBy")
+  questionsReviewed  Question[]         @relation("QuestionReviewedBy")
+  revisions          QuestionRevision[]
+  worksheetsCreated  Worksheet[]
+  auditLogs          AuditLog[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ───────────────────────── Curriculum ─────────────────────────
+
+model Curriculum {
+  id          String   @id @default(cuid())
+  code        String   @unique // e.g. GDPT2018
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chapters Chapter[]
+
+  @@map("curricula")
+}
+
+model Grade {
+  id          String        @id @default(cuid())
+  level       Int           @unique // 6, 7, 8, 9
+  name        String // "Lớp 6"
+  slug        String        @unique // "lop-6"
+  description String?
+  sortOrder   Int           @default(0)
+  status      PublishStatus @default(DRAFT)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  chapters   Chapter[]
+  questions  Question[]
+  worksheets Worksheet[]
+
+  @@map("grades")
+}
+
+model Chapter {
+  id           String        @id @default(cuid())
+  gradeId      String
+  curriculumId String
+  number       Int
+  title        String
+  slug         String
+  summary      String?
+  keyPoints    String[]      @default([])
+  sortOrder    Int           @default(0)
+  status       PublishStatus @default(DRAFT)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  grade      Grade       @relation(fields: [gradeId], references: [id], onDelete: Restrict)
+  curriculum Curriculum  @relation(fields: [curriculumId], references: [id], onDelete: Restrict)
+  topics     Topic[]
+  questions  Question[]
+  worksheets Worksheet[]
+
+  @@unique([gradeId, slug])
+  @@unique([gradeId, curriculumId, number])
+  @@index([gradeId, status, sortOrder])
+  @@map("chapters")
+}
+
+model Topic {
+  id               String        @id @default(cuid())
+  chapterId        String
+  title            String
+  slug             String
+  summary          String?
+  knowledgeSummary String? // MathText (plain text + $LaTeX$)
+  example          String? // MathText
+  sortOrder        Int           @default(0)
+  status           PublishStatus @default(DRAFT)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  chapter    Chapter     @relation(fields: [chapterId], references: [id], onDelete: Restrict)
+  questions  Question[]
+  worksheets Worksheet[]
+
+  @@unique([chapterId, slug])
+  @@index([chapterId, status, sortOrder])
+  @@map("topics")
+}
+
+// ───────────────────────── Question bank ─────────────────────────
+
+model Question {
+  id             String         @id @default(cuid())
+  code           String         @unique // e.g. T6-C1-0001
+  gradeId        String
+  chapterId      String
+  topicId        String
+  difficulty     Difficulty
+  type           QuestionType
+  content        String // MathText
+  answer         String // MathText — short final answer
+  solution       String // MathText — step-by-step
+  tags           String[]       @default([])
+  status         QuestionStatus @default(DRAFT)
+  source         String? // origin / author note, never copyrighted text
+  currentVersion Int            @default(1)
+  createdById    String?
+  updatedById    String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  publishedAt    DateTime?
+  archivedAt     DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  grade      Grade              @relation(fields: [gradeId], references: [id], onDelete: Restrict)
+  chapter    Chapter            @relation(fields: [chapterId], references: [id], onDelete: Restrict)
+  topic      Topic              @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  createdBy  User?              @relation("QuestionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy  User?              @relation("QuestionUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  reviewedBy User?              @relation("QuestionReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  options    QuestionOption[]
+  revisions  QuestionRevision[]
+  worksheets WorksheetQuestion[]
+  reports    QuestionReport[]
+
+  @@index([topicId, status, difficulty])
+  @@index([chapterId, status, difficulty])
+  @@index([gradeId, status])
+  @@index([status, updatedAt])
+  @@map("questions")
+}
+
+model QuestionOption {
+  id         String  @id @default(cuid())
+  questionId String
+  label      String // A, B, C, D
+  content    String // MathText
+  isCorrect  Boolean @default(false)
+  sortOrder  Int     @default(0)
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, label])
+  @@map("question_options")
+}
+
+/// Immutable snapshot of a question at a given version.
+/// Worksheets reference revisions so that the question PDF and the answer PDF
+/// always match the version that was used when the worksheet was built.
+model QuestionRevision {
+  id          String   @id @default(cuid())
+  questionId  String
+  version     Int
+  snapshot    Json // QuestionSnapshot (see src/features/questions/snapshot.ts)
+  changeNote  String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  question   Question            @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  createdBy  User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  worksheets WorksheetQuestion[]
+
+  @@unique([questionId, version])
+  @@map("question_revisions")
+}
+
+model QuestionReport {
+  id         String       @id @default(cuid())
+  questionId String
+  reason     String // WRONG_ANSWER | TYPO | UNCLEAR | OTHER
+  message    String?
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([questionId])
+  @@map("question_reports")
+}
+
+// ───────────────────────── Worksheets ─────────────────────────
+
+model Worksheet {
+  id              String        @id @default(cuid())
+  slug            String        @unique
+  title           String
+  description     String?
+  kind            WorksheetKind @default(CURATED)
+  status          PublishStatus @default(DRAFT)
+  gradeId         String
+  chapterId       String?
+  topicId         String?
+  difficulty      Difficulty? // null = mixed
+  durationMinutes Int           @default(30)
+  questionCount   Int           @default(0)
+  isFeatured      Boolean       @default(false)
+  downloadCount   Int           @default(0)
+  createdById     String?
+  publishedAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  grade     Grade               @relation(fields: [gradeId], references: [id], onDelete: Restrict)
+  chapter   Chapter?            @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  topic     Topic?              @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  createdBy User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  questions WorksheetQuestion[]
+  downloads Download[]
+
+  @@index([kind, status, gradeId])
+  @@index([chapterId, kind, status])
+  @@index([topicId, kind, status])
+  @@index([isFeatured, status])
+  @@map("worksheets")
+}
+
+model WorksheetQuestion {
+  id                 String @id @default(cuid())
+  worksheetId        String
+  questionId         String
+  questionRevisionId String
+  position           Int
+
+  worksheet Worksheet        @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
+  question  Question         @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  revision  QuestionRevision @relation(fields: [questionRevisionId], references: [id], onDelete: Restrict)
+
+  @@unique([worksheetId, position])
+  @@unique([worksheetId, questionId])
+  @@index([questionId])
+  @@map("worksheet_questions")
+}
+
+model Download {
+  id          String       @id @default(cuid())
+  worksheetId String
+  kind        DownloadKind
+  createdAt   DateTime     @default(now())
+
+  worksheet Worksheet @relation(fields: [worksheetId], references: [id], onDelete: Cascade)
+
+  @@index([worksheetId, kind])
+  @@index([createdAt])
+  @@map("downloads")
+}
+
+// ───────────────────────── Audit ─────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String // e.g. question.publish
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
