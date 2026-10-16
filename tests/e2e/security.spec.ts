@@ -86,6 +86,7 @@ test.describe("security", () => {
     const home = await request.get("/");
     expect(home.headers()["x-frame-options"]).toBe("DENY");
     expect(home.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
+    expect(home.headers()["content-security-policy"]).not.toContain("unsafe-eval");
     const robots = await (await request.get("/robots.txt")).text();
     expect(robots).toContain("Disallow: /admin");
     const sitemap = await (await request.get("/sitemap.xml")).text();
