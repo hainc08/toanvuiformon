@@ -19,18 +19,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
-      postgres:
-        image: postgres:16
+      mariadb:
+        image: mariadb:11.4
         env:
-          POSTGRES_USER: toanvui
-          POSTGRES_PASSWORD: toanvui
-          POSTGRES_DB: toanvui_ci
-        ports: ["5432:5432"]
+          MARIADB_ROOT_PASSWORD: toanvui
+          MARIADB_DATABASE: toanvui_ci
+        ports: ["3306:3306"]
         options: >-
-          --health-cmd "pg_isready -U toanvui" --health-interval 5s --health-timeout 5s --health-retries 20
+          --health-cmd "healthcheck.sh --connect --innodb_initialized" --health-interval 5s --health-timeout 5s --health-retries 20
     env:
-      DATABASE_URL: postgresql://toanvui:toanvui@localhost:5432/toanvui_ci?schema=public
-      TEST_DATABASE_URL: postgresql://toanvui:toanvui@localhost:5432/toanvui_test?schema=public
+      # Integration/E2E setup drops and recreates toanvui_test, so the CI user needs CREATE/DROP (root).
+      DATABASE_URL: mysql://root:toanvui@127.0.0.1:3306/toanvui_ci
+      TEST_DATABASE_URL: mysql://root:toanvui@127.0.0.1:3306/toanvui_test
       SESSION_SECRET: ci-only-secret-0123456789abcdef0123456789
       SITE_URL: http://localhost:3000
       NEXT_TELEMETRY_DISABLED: "1"
@@ -47,9 +47,6 @@ jobs:
 
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
-
-      - name: Create test database
-        run: PGPASSWORD=toanvui psql -h localhost -U toanvui -d toanvui_ci -c "CREATE DATABASE toanvui_test;"
 
       - name: Apply migrations and check schema drift
         run: |

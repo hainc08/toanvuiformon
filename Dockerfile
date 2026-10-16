@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 # ── dependencies (incl. dev deps for build) ──
 FROM base AS deps
 # Placeholder only so `prisma generate` (postinstall) can load prisma.config.ts; never used at runtime.
-ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
+ENV DATABASE_URL="mysql://build:build@localhost:3306/build"
 COPY package.json package-lock.json prisma.config.ts ./
 COPY prisma ./prisma
 RUN npm ci --no-audit --no-fund

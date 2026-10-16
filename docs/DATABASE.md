@@ -1,6 +1,12 @@
 # Database — Toán Vui
 
-PostgreSQL 16 · Prisma 7 · schema: [`prisma/schema.prisma`](../prisma/schema.prisma) · migrations: `prisma/migrations/`.
+MySQL 8 / MariaDB 10.6+ (utf8mb4, `utf8mb4_unicode_ci`) · Prisma 7 + `@prisma/adapter-mariadb` · schema: [`prisma/schema.prisma`](../prisma/schema.prisma) · migrations: `prisma/migrations/`.
+
+> **2026-10-16 — chuyển từ PostgreSQL sang MySQL/MariaDB** (Hostinger Web Hosting chỉ có MySQL):
+> - `Chapter.keyPoints`, `Question.tags` là cột `JSON` chứa mảng chuỗi (MySQL không có kiểu mảng); đọc qua `toStringArray()` (`src/lib/db/json.ts`), tìm tag bằng `array_contains`.
+> - Văn bản dài (nội dung, lời giải, mô tả…) là `TEXT`; chuỗi ngắn `VARCHAR(191)`, email `VARCHAR(255)`.
+> - Tìm kiếm không phân biệt hoa/thường (và dấu) nhờ collation `utf8mb4_unicode_ci` — không dùng `mode: "insensitive"`.
+> - Các mục bên dưới còn nhắc kiểu PostgreSQL (`text[]`, `jsonb`, `timestamptz`) — tương ứng `JSON`, `JSON`, `DATETIME(3)` (UTC).
 
 ## 1. ERD
 

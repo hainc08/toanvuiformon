@@ -1,5 +1,7 @@
 # Architecture — Toán Vui
 
+> **2026-10-16:** cơ sở dữ liệu chuyển sang **MySQL/MariaDB** (Prisma `provider = "mysql"`, adapter `@prisma/adapter-mariadb`) để chạy trên Hostinger Web Hosting. Xem ghi chú đầu [DATABASE.md](DATABASE.md).
+
 ## 1. Tổng quan
 
 Một ứng dụng **Next.js 16 (App Router)** duy nhất phục vụ cả giao diện, API và PDF — không microservice, không Redis/queue (chưa có nhu cầu thực tế, giảm chi phí vận hành).

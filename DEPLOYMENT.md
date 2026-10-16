@@ -1,5 +1,7 @@
 # Deployment — Toán Vui trên Hostinger
 
+> **Cập nhật 2026-10-16:** dự án đã chuyển sang **MySQL/MariaDB** và triển khai theo **Mode A — Hostinger Node.js Web App + MySQL của Hostinger** (hướng dẫn từng bước: `HOSTINGER.md` trên nhánh `deploy`). Các file Mode B (`docker-compose.yml`, `scripts/backup-now.sh`, `scripts/restore.sh`, `.github/workflows/deploy.yml`) **vẫn viết cho PostgreSQL và chưa được cập nhật** — không dùng khi chưa chuyển chúng sang MariaDB.
+
 > Trạng thái: cấu hình đã sẵn sàng và đã kiểm thử local (build standalone, PDF, E2E). **Chưa triển khai lên Hostinger** vì chưa có quyền truy cập tài khoản/VPS — làm theo các bước dưới đây.
 
 ## 1. Chọn gói Hostinger

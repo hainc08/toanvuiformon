@@ -2,7 +2,7 @@
 
 Nền tảng web luyện Toán THCS miễn phí — MVP: **Toán lớp 6** (Chương trình GDPT 2018). Học sinh tìm bài tập theo chương/dạng toán/mức độ, xem trước đề, tải PDF A4 (đề và đáp án riêng), tự tạo đề luyện tập và xem lời giải khi chủ động yêu cầu. Quản trị viên quản lý ngân hàng câu hỏi có quy trình duyệt.
 
-**Stack:** Next.js 16 (App Router) · React 19 · TypeScript strict · Tailwind CSS 4 + shadcn-style UI · Lucide · PostgreSQL 16 + Prisma 7 · Zod 4 · KaTeX · Playwright (PDF + E2E) · Vitest · Docker + Caddy · GitHub Actions → Hostinger VPS.
+**Stack:** Next.js 16 (App Router) · React 19 · TypeScript strict · Tailwind CSS 4 + shadcn-style UI · Lucide · MySQL / MariaDB + Prisma 7 · Zod 4 · KaTeX · Playwright (PDF + E2E) · Vitest · Docker + Caddy · GitHub Actions · Hostinger (Node.js Web App + MySQL).
 
 ## Tính năng
 
@@ -18,34 +18,30 @@ Nền tảng web luyện Toán THCS miễn phí — MVP: **Toán lớp 6** (Chư
 
 Ngân hàng khởi tạo: **134 câu hỏi** tự biên soạn (Chương 1–2 trọng tâm, có cả 3 mức độ), **133 câu có kiểm chứng đáp án tự động** bằng code (`prisma/data/verify.ts`), 8 bộ đề mẫu.
 
-## Chạy local nhanh (không cần cài PostgreSQL/Docker)
+## Chạy local nhanh
 
-Yêu cầu: Node.js 22.12+ (≤ 24).
+Yêu cầu: Node.js 22.12+ (≤ 24) và **MariaDB** đã cài trên máy ([tải tại đây](https://mariadb.org/download/); không cần tạo DB, không cần mật khẩu root, service MariaDB có chạy hay không cũng được).
 
 ```bash
 npm install
 npm run local
 ```
 
-Lệnh `local` tự khởi động PostgreSQL nhúng (dữ liệu lưu ở `.local-db/`), áp dụng migrations, nạp dữ liệu Toán 6, tạo tài khoản admin lần đầu (in ra màn hình, lưu ở `.local-db/admin-login.txt`), cài Chromium cho PDF nếu thiếu, rồi chạy http://localhost:3000. Dừng bằng `Ctrl+C`. Xóa thư mục `.local-db/` để làm lại từ đầu.
+Lệnh `local` tự khởi động một MariaDB riêng cho dự án (cổng 3307, dữ liệu lưu ở `.local-db/mariadb/`), áp dụng migrations, nạp dữ liệu Toán 6, tạo tài khoản admin lần đầu (in ra màn hình, lưu ở `.local-db/admin-login.txt`), cài Chromium cho PDF nếu thiếu, rồi chạy http://localhost:3000. Dừng bằng `Ctrl+C`. Xóa thư mục `.local-db/` để làm lại từ đầu.
 
 > **Windows có nhiều bản Node:** kiểm tra `node -v` ≥ 22.12 trước khi `npm install` (file `.nvmrc` ghi `22`; `npm install` báo `EBADENGINE` nếu sai bản). Với nvm-windows: `nvm use 22`.
 >
-> `.local-db/` tạo trước bản này có thể dùng encoding WIN1252 (lỗi khi nạp tiếng Việt) — `npm run local` sẽ báo; khi đó xóa `.local-db/` rồi chạy lại.
+> Tìm MariaDB theo thứ tự: biến `MARIADB_BIN` (thư mục chứa `mariadbd`), `C:\Program Files\MariaDB *\bin` (bản mới nhất), rồi `PATH`. Đổi cổng DB bằng `LOCAL_DB_PORT`.
 
-Chạy test tích hợp/E2E bằng chính PostgreSQL nhúng (trong lúc `npm run local` đang chạy):
+Chạy test tích hợp/E2E bằng chính MariaDB local (trong lúc `npm run local` đang chạy; DB `toanvui_test` được tự xóa và tạo lại):
 
 ```bash
-# Tạo DB test một lần (cổng 5433, user postgres, mật khẩu trong .local-db/pg-password):
-#   CREATE DATABASE toanvui_test ENCODING 'UTF8' LOCALE_PROVIDER icu ICU_LOCALE 'und' LOCALE 'C' TEMPLATE template0;
-export TEST_DATABASE_URL="postgresql://postgres:$(cat .local-db/pg-password)@127.0.0.1:5433/toanvui_test?schema=public"
+export TEST_DATABASE_URL="mysql://toanvui:$(cat .local-db/db-password)@127.0.0.1:3307/toanvui_test"
 npm run test:integration
 npm run build && npm run test:e2e
 ```
 
-## Chạy local với PostgreSQL riêng
-
-Yêu cầu: Node.js 22.12+ (≤ 24), PostgreSQL 16.
+## Chạy local với MySQL/MariaDB riêng
 
 ```bash
 cp .env.example .env              # sửa DATABASE_URL, SESSION_SECRET
@@ -56,6 +52,8 @@ ADMIN_EMAIL=ban@example.com ADMIN_PASSWORD='MatKhauManh123' npm run admin:create
 npx playwright install chromium-headless-shell   # trình duyệt cho PDF
 npm run dev                       # http://localhost:3000  (admin: /admin)
 ```
+
+DB phải dùng `utf8mb4` (ví dụ `CREATE DATABASE toanvui CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`). Mật khẩu có ký tự đặc biệt (`@ : / # ? %`) phải mã hóa URL trong `DATABASE_URL`.
 
 ## Lệnh
 
