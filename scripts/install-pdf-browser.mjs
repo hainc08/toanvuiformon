@@ -3,5 +3,5 @@
 import { spawnSync } from "node:child_process";
 
 if (process.env.CHROMIUM_PATH || process.env.SKIP_PDF_BROWSER_INSTALL === "1") process.exit(0);
-const r = spawnSync("npx playwright install chromium-headless-shell", { stdio: "inherit", shell: true });
+const r = spawnSync("npx --no-install playwright install chromium-headless-shell", { stdio: "inherit", shell: true, timeout: 10 * 60_000 });
 if (r.status !== 0) console.warn("[toanvui] ⚠ Không cài được Chromium — xuất PDF sẽ trả 503 PDF_UNAVAILABLE.");

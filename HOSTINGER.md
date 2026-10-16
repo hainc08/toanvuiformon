@@ -2,7 +2,7 @@
 
 Site: **https://toanvui.manabihub.me** · DB: `u774510961_toanvuidb` · user: `u774510961_toanvuiusr`
 
-Ứng dụng tự tạo bảng (migrations), nạp dữ liệu Toán 6 và tạo tài khoản admin đầu tiên **mỗi lần khởi động** (`npm start` → `scripts/start-production.mjs`; chạy lại an toàn, không ghi đè dữ liệu đã có). Không cần Remote MySQL hay chạy lệnh gì từ máy local.
+Mỗi lần khởi động (`npm start` → `scripts/start-production.mjs`) ứng dụng tự áp dụng migrations mới. Dữ liệu mẫu Toán 6 **chỉ được nạp khi DB còn trống** (lần deploy đầu) và tài khoản admin từ `SEED_ADMIN_*` **chỉ được tạo khi chưa có tài khoản nào** — nội dung hay tài khoản bạn xóa/sửa trong trang quản trị không bao giờ bị khôi phục lại. Không cần Remote MySQL hay chạy lệnh gì từ máy local.
 
 ## 1. Mật khẩu MySQL
 
@@ -37,7 +37,7 @@ hPanel → Websites → toanvui.manabihub.me → **Node.js** (Add/Deploy Node.js
 
 - **Không** thêm `NODE_ENV` — nếu Hostinger dùng nó lúc `npm install`, các gói cần cho build (TypeScript, Tailwind, Prisma CLI) sẽ bị bỏ qua và build lỗi. Next.js tự chạy ở chế độ production.
 - Host `localhost` đúng khi app và DB cùng tài khoản Hostinger. Nếu kết nối lỗi, xem hostname MySQL trong hPanel (trang MySQL Databases) và thay vào.
-- `SEED_ADMIN_*` chỉ tạo admin **khi email đó chưa tồn tại** — sau lần deploy đầu có thể xóa 2 biến này.
+- `SEED_ADMIN_*` chỉ dùng ở lần deploy đầu (khi DB chưa có tài khoản nào). **Sau khi đăng nhập được, xóa 2 biến này** khỏi hPanel để mật khẩu không nằm lại trong cấu hình.
 
 ## 4. Deploy & kiểm tra
 
@@ -53,13 +53,15 @@ Kiểm tra:
 - https://toanvui.manabihub.me/api/health → `"status":"ok","db":"ok"`
 - Trang chủ, `/lop-6`, `/thu-vien`, `/tao-de`
 - Tải PDF một bộ đề. Nếu trả **503 `PDF_UNAVAILABLE`**: Hostinger không chạy được Chromium — phần còn lại của site vẫn hoạt động; xem DEPLOYMENT.md §10 về phương án PDF.
-- https://toanvui.manabihub.me/admin → đăng nhập bằng `SEED_ADMIN_EMAIL`, đổi mật khẩu ở **Cài đặt**.
+- https://toanvui.manabihub.me/admin → đăng nhập bằng `SEED_ADMIN_EMAIL`, đổi mật khẩu ở **Cài đặt**, rồi xóa `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` trên hPanel.
 
 Lỗi thường gặp:
 
 | Triệu chứng | Nguyên nhân / cách xử lý |
 | --- | --- |
 | Log: `Áp dụng migrations thất bại` | Sai `DATABASE_URL` (mật khẩu chưa mã hóa URL, sai host/user/DB) |
+| Log: `DATABASE_URL is not a valid URL` | Mật khẩu có ký tự đặc biệt chưa mã hóa URL (xem §1) |
+| Log: `npx: … not found` / `could not determine executable` | Thiếu devDependencies lúc cài — xóa biến `NODE_ENV`, deploy lại |
 | `/api/health` → `db: unreachable` | Như trên, hoặc DB chưa gán quyền cho user |
 | Build lỗi thiếu module (`typescript`, `@tailwindcss/postcss`, `prisma`) | Xóa biến `NODE_ENV`, deploy lại |
 | 503 toàn site | Xem log ứng dụng; app phải lắng nghe `PORT` do Hostinger cấp (đã xử lý trong `scripts/start-standalone.mjs`) |

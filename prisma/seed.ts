@@ -7,6 +7,8 @@
  * Usage: npm run db:seed
  * Optional: SEED_PUBLISH_VERIFIED=false to keep all questions in review.
  * Optional: SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD to create the first admin account.
+ * SEED_ONLY_EMPTY_DB=true (set by `npm start` on production): load content only into an empty DB and
+ * create the admin only when no account exists — content or accounts deleted in the Admin never come back.
  */
 import "dotenv/config";
 import bcrypt from "bcryptjs";
@@ -184,7 +186,8 @@ async function seedWorksheets(gradeId: string) {
   return created;
 }
 
-async function seedAdmin() {
+async function seedAdmin(onlyWhenNoUsers: boolean) {
+  if (onlyWhenNoUsers && (await prisma.user.count()) > 0) return null;
   const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.SEED_ADMIN_PASSWORD;
   if (!email || !password) return null;
@@ -199,13 +202,18 @@ async function seedAdmin() {
 
 async function main() {
   console.log("Seeding Toán Vui…");
-  const { grade, topicIds } = await seedCurriculum();
-  console.log(`  ✓ Curriculum: ${CHAPTERS.length} chapters, ${topicIds.size} topics`);
-  const q = await seedQuestions(grade.id, topicIds);
-  console.log(`  ✓ Questions: ${q.created} created (${q.published} published, ${q.created - q.published} pending review)`);
-  const w = await seedWorksheets(grade.id);
-  console.log(`  ✓ Worksheets: ${w} created`);
-  const admin = await seedAdmin();
+  const onlyEmpty = process.env.SEED_ONLY_EMPTY_DB === "true";
+  if (onlyEmpty && (await prisma.curriculum.count()) > 0) {
+    console.log("  • Database already has content — sample content skipped");
+  } else {
+    const { grade, topicIds } = await seedCurriculum();
+    console.log(`  ✓ Curriculum: ${CHAPTERS.length} chapters, ${topicIds.size} topics`);
+    const q = await seedQuestions(grade.id, topicIds);
+    console.log(`  ✓ Questions: ${q.created} created (${q.published} published, ${q.created - q.published} pending review)`);
+    const w = await seedWorksheets(grade.id);
+    console.log(`  ✓ Worksheets: ${w} created`);
+  }
+  const admin = await seedAdmin(onlyEmpty);
   if (admin) console.log(`  ✓ Admin account created: ${admin}`);
 }
 
