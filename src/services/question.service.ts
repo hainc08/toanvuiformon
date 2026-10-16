@@ -33,9 +33,9 @@ export async function listAdminQuestions(f: AdminQuestionFilter, page: number, p
     ...(f.q
       ? {
           OR: [
-            { code: { contains: f.q, mode: "insensitive" } },
-            { content: { contains: f.q, mode: "insensitive" } },
-            { tags: { has: f.q } },
+            { code: { contains: f.q } },
+            { content: { contains: f.q } },
+            { tags: { array_contains: f.q } },
           ],
         }
       : {}),

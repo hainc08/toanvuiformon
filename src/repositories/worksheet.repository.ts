@@ -43,10 +43,10 @@ function publicWhere(f: PublicWorksheetFilter): Prisma.WorksheetWhereInput {
   if (f.q) {
     and.push({
       OR: [
-        { title: { contains: f.q, mode: "insensitive" } },
-        { description: { contains: f.q, mode: "insensitive" } },
-        { chapter: { title: { contains: f.q, mode: "insensitive" } } },
-        { topic: { title: { contains: f.q, mode: "insensitive" } } },
+        { title: { contains: f.q } },
+        { description: { contains: f.q } },
+        { chapter: { title: { contains: f.q } } },
+        { topic: { title: { contains: f.q } } },
       ],
     });
   }

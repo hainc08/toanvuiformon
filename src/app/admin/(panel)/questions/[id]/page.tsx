@@ -5,6 +5,7 @@ import { QuestionEditor, type QuestionFormValue } from "@/components/admin/quest
 import { QuestionStatusActions } from "@/components/admin/question-status-actions";
 import { ReportActions } from "@/components/admin/report-actions";
 import { QuestionStatusBadge } from "@/components/admin/status-badge";
+import { toStringArray } from "@/lib/db/json";
 import { requireAdminPage } from "@/lib/auth/guard";
 import { can } from "@/lib/auth/permissions";
 import { ApiError } from "@/lib/http";
@@ -33,7 +34,7 @@ export default async function EditQuestionPage({ params }: { params: Promise<{ i
     content: q.content,
     answer: q.answer,
     solution: q.solution,
-    tags: q.tags,
+    tags: toStringArray(q.tags),
     source: q.source,
     options: q.options.map((o) => ({ label: o.label as QuestionFormValue["options"][number]["label"], content: o.content, isCorrect: o.isCorrect })),
   };

@@ -3,6 +3,7 @@ import { CrudForm } from "@/components/admin/crud-form";
 import { chapterFields } from "@/components/admin/catalog-fields";
 import { PublishStatusBadge } from "@/components/admin/status-badge";
 import { requireAdminPage } from "@/lib/auth/guard";
+import { toStringArray } from "@/lib/db/json";
 import { listChaptersAdmin, listGradesAdmin } from "@/services/catalog-admin.service";
 
 export const metadata = { title: "Chương học" };
@@ -30,7 +31,7 @@ export default async function ChaptersPage() {
                   deleteEndpoint={`/api/admin/chapters/${c.id}`}
                   method="PATCH"
                   submitLabel="Lưu"
-                  initial={{ gradeId: c.gradeId, number: String(c.number), title: c.title, slug: c.slug, status: c.status, summary: c.summary ?? "", keyPoints: c.keyPoints.join("\n") }}
+                  initial={{ gradeId: c.gradeId, number: String(c.number), title: c.title, slug: c.slug, status: c.status, summary: c.summary ?? "", keyPoints: toStringArray(c.keyPoints).join("\n") }}
                 />
               </div>
             </details>

@@ -12,7 +12,7 @@ export async function listAdminWorksheets(f: { q?: string; kind: "CURATED" | "GE
   const where: Prisma.WorksheetWhereInput = {
     kind: f.kind,
     ...(f.status ? { status: f.status } : {}),
-    ...(f.q ? { OR: [{ title: { contains: f.q, mode: "insensitive" } }, { slug: { contains: f.q, mode: "insensitive" } }] } : {}),
+    ...(f.q ? { OR: [{ title: { contains: f.q } }, { slug: { contains: f.q } }] } : {}),
   };
   const [items, total] = await Promise.all([
     prisma.worksheet.findMany({

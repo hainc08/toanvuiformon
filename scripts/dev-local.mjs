@@ -1,27 +1,29 @@
 /**
- * One-command local run (Windows / macOS / Linux) — no PostgreSQL or Docker install needed.
+ * One-command local run (Windows / macOS / Linux) — needs MariaDB installed (https://mariadb.org/download/),
+ * but no database setup, root password or running service.
  *
  *   npm install
  *   npm run local
  *
- * Starts an embedded PostgreSQL 16 (data kept in ./.local-db), applies migrations, seeds Toán 6,
- * creates a local admin account on first run, installs the PDF browser if missing, then runs
+ * Starts a private MariaDB server (data kept in ./.local-db/mariadb, port 3307), applies migrations,
+ * seeds Toán 6, creates a local admin account on first run, installs the PDF browser if missing, then runs
  * `next dev` on http://localhost:3000. Press Ctrl+C to stop everything.
  */
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import EmbeddedPostgres from "embedded-postgres";
-import pg from "pg";
+import mariadb from "mariadb";
 
 const ROOT = process.cwd();
 const STATE = path.join(ROOT, ".local-db");
-const DATA_DIR = path.join(STATE, "data");
-const PG_PORT = Number(process.env.LOCAL_PG_PORT ?? 5433);
+const DATA_DIR = path.join(STATE, "mariadb");
+const DB_PORT = Number(process.env.LOCAL_DB_PORT ?? 3307);
 const APP_PORT = Number(process.env.PORT ?? 3000);
 const DB_NAME = "toanvui";
-const PG_USER = "postgres";
+const DB_USER = "toanvui";
+const IS_WIN = process.platform === "win32";
+const EXE = IS_WIN ? ".exe" : "";
 
 mkdirSync(STATE, { recursive: true });
 
@@ -33,9 +35,10 @@ function persisted(file, create) {
   return value;
 }
 
-const pgPassword = persisted("pg-password", () => randomBytes(18).toString("base64url"));
+const rootPassword = persisted("db-root-password", () => randomBytes(18).toString("base64url"));
+const dbPassword = persisted("db-password", () => randomBytes(18).toString("base64url"));
 const sessionSecret = persisted("session-secret", () => randomBytes(48).toString("base64url"));
-const DATABASE_URL = `postgresql://${PG_USER}:${pgPassword}@127.0.0.1:${PG_PORT}/${DB_NAME}?schema=public`;
+const DATABASE_URL = `mysql://${DB_USER}:${dbPassword}@127.0.0.1:${DB_PORT}/${DB_NAME}`;
 
 const env = {
   ...process.env,
@@ -53,53 +56,120 @@ function run(cmd, extraEnv = {}) {
   });
 }
 
+function runFile(file, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, { stdio: ["ignore", "ignore", "pipe"] });
+    let err = "";
+    child.stderr.on("data", (d) => (err += d));
+    child.on("error", reject);
+    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${path.basename(file)} exited with code ${code}\n${err}`))));
+  });
+}
+
 const log = (msg) => console.log(`\x1b[36m[toanvui]\x1b[0m ${msg}`);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const db = new EmbeddedPostgres({
-  databaseDir: DATA_DIR,
-  user: PG_USER,
-  password: pgPassword,
-  port: PG_PORT,
-  persistent: true,
-  // Windows initdb otherwise picks the OS code page (e.g. WIN1252), which cannot store Vietnamese text.
-  // ICU gives Unicode case folding (case-insensitive search) without depending on OS locale names.
-  initdbFlags: ["--encoding=UTF8", "--locale-provider=icu", "--icu-locale=und", "--locale=C"],
-  onLog: () => {},
-});
+/** Directory holding mariadbd: MARIADB_BIN, then C:\Program Files\MariaDB *\bin (newest), then PATH. */
+function findMariadbBin() {
+  const candidates = [];
+  if (process.env.MARIADB_BIN) candidates.push(process.env.MARIADB_BIN);
+  if (IS_WIN) {
+    for (const base of [process.env.ProgramFiles, process.env["ProgramFiles(x86)"]].filter(Boolean)) {
+      if (!existsSync(base)) continue;
+      const dirs = readdirSync(base).filter((d) => /^MariaDB \d/.test(d));
+      dirs.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+      candidates.push(...dirs.map((d) => path.join(base, d, "bin")));
+    }
+  }
+  candidates.push(...(process.env.PATH ?? "").split(path.delimiter), "/usr/sbin", "/usr/local/sbin", "/opt/homebrew/bin");
+  return candidates.find((dir) => dir && existsSync(path.join(dir, `mariadbd${EXE}`)));
+}
 
+async function connect(user, password, database) {
+  return mariadb.createConnection({ host: "127.0.0.1", port: DB_PORT, user, password, database, connectTimeout: 2000 });
+}
+
+async function canConnectAsApp() {
+  try {
+    const c = await connect(DB_USER, dbPassword);
+    await c.end();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+let server = null; // the mariadbd we started (null when reusing one that was already running)
+let bin = null;
 let stopping = false;
 async function shutdown(code = 0) {
   if (stopping) return;
   stopping = true;
-  log("Đang dừng PostgreSQL…");
-  await db.stop().catch(() => undefined);
+  if (server) {
+    log("Đang dừng MariaDB…");
+    await runFile(path.join(bin, `mariadb-admin${EXE}`), ["-h127.0.0.1", `-P${DB_PORT}`, "-uroot", `-p${rootPassword}`, "shutdown"]).catch(() => server.kill());
+  }
   process.exit(code);
 }
 process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
 try {
-  if (!existsSync(path.join(DATA_DIR, "PG_VERSION"))) {
-    log("Khởi tạo PostgreSQL nhúng lần đầu…");
-    await db.initialise();
-  }
-  await db.start();
-  log(`PostgreSQL đang chạy ở cổng ${PG_PORT}`);
+  const firstRun = !existsSync(DATA_DIR);
+  if (await canConnectAsApp()) {
+    log(`MariaDB đã chạy sẵn ở cổng ${DB_PORT} — dùng lại`);
+  } else {
+    bin = findMariadbBin();
+    if (!bin) {
+      throw new Error("Không tìm thấy MariaDB. Cài MariaDB (https://mariadb.org/download/) rồi chạy lại, hoặc đặt MARIADB_BIN=<thư mục chứa mariadbd>.");
+    }
+    if (firstRun) {
+      log(`Khởi tạo MariaDB lần đầu (${bin})…`);
+      const installDb = path.join(bin, `mariadb-install-db${EXE}`);
+      const args = IS_WIN
+        ? [`--datadir=${DATA_DIR}`, `--password=${rootPassword}`]
+        : [`--datadir=${DATA_DIR}`, "--auth-root-authentication-method=normal", "--skip-test-db"];
+      await runFile(installDb, args);
+    }
+    server = spawn(
+      path.join(bin, `mariadbd${EXE}`),
+      [
+        ...(IS_WIN ? [] : ["--no-defaults"]),
+        `--datadir=${DATA_DIR}`,
+        `--port=${DB_PORT}`,
+        "--bind-address=127.0.0.1",
+        "--character-set-server=utf8mb4",
+        "--collation-server=utf8mb4_unicode_ci",
+        ...(IS_WIN ? [] : [`--socket=${path.join(STATE, "mariadb.sock")}`]),
+      ],
+      { stdio: ["ignore", "ignore", "pipe"] },
+    );
+    let serverLog = "";
+    server.stderr.on("data", (d) => (serverLog = (serverLog + d).slice(-4000)));
+    server.on("exit", (code) => {
+      if (!stopping) {
+        console.error(serverLog);
+        console.error(`[toanvui] MariaDB dừng bất ngờ (code ${code}).`);
+        shutdown(1);
+      }
+    });
 
-  const admin = new pg.Client({ connectionString: DATABASE_URL.replace(`/${DB_NAME}?`, "/postgres?") });
-  await admin.connect();
-  const exists = await admin.query("SELECT 1 FROM pg_database WHERE datname = $1", [DB_NAME]);
-  if (exists.rowCount === 0) await admin.query(`CREATE DATABASE ${DB_NAME} ENCODING 'UTF8' LOCALE_PROVIDER icu ICU_LOCALE 'und' LOCALE 'C' TEMPLATE template0`);
-  await admin.end();
-
-  const check = new pg.Client({ connectionString: DATABASE_URL });
-  await check.connect();
-  const vi = await check
-    .query("SELECT 'Ước chung' ILIKE '%ƯỚC CHUNG%' AS ok")
-    .catch(() => ({ rows: [{ ok: false }] }));
-  await check.end();
-  if (!vi.rows[0].ok) {
-    throw new Error(`Database "${DB_NAME}" không xử lý được tiếng Việt (encoding/locale cũ). Dừng lại, xóa thư mục .local-db/ rồi chạy lại "npm run local".`);
+    // Wait until it accepts root connections, then make sure the app user and database exist.
+    let root = null;
+    for (let i = 0; i < 60 && !root; i++) {
+      root = await connect("root", rootPassword).catch(() => (IS_WIN ? null : connect("root", "").catch(() => null)));
+      if (!root) await sleep(1000);
+    }
+    if (!root) throw new Error(`MariaDB không khởi động được ở cổng ${DB_PORT}.\n${serverLog}`);
+    if (!IS_WIN && firstRun) await root.query("ALTER USER 'root'@'localhost' IDENTIFIED BY ?", [rootPassword]).catch(() => undefined);
+    await root.query(`CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+    for (const host of ["localhost", "127.0.0.1"]) {
+      await root.query(`CREATE USER IF NOT EXISTS '${DB_USER}'@'${host}' IDENTIFIED BY ?`, [dbPassword]);
+      // Local only: ALL lets tests create/drop toanvui_test and `prisma migrate dev` use a shadow database.
+      await root.query(`GRANT ALL PRIVILEGES ON *.* TO '${DB_USER}'@'${host}'`);
+    }
+    await root.end();
+    log(`MariaDB đang chạy ở cổng ${DB_PORT}`);
   }
 
   log("Áp dụng migrations…");
@@ -107,12 +177,11 @@ try {
   log("Nạp dữ liệu Toán 6 (bỏ qua nếu đã có)…");
   await run("npx tsx prisma/seed.ts");
 
-  const client = new pg.Client({ connectionString: DATABASE_URL });
-  await client.connect();
-  const users = await client.query("SELECT count(*)::int AS n FROM users");
+  const client = await connect(DB_USER, dbPassword, DB_NAME);
+  const [{ n }] = await client.query("SELECT COUNT(*) AS n FROM users");
   await client.end();
   const credsFile = path.join(STATE, "admin-login.txt");
-  if (users.rows[0].n === 0) {
+  if (Number(n) === 0) {
     const password = `Local${randomBytes(6).toString("hex")}9`;
     await run("npx tsx scripts/create-admin.ts", { ADMIN_EMAIL: "admin@toanvui.local", ADMIN_PASSWORD: password, ADMIN_NAME: "Quản trị viên (local)" });
     writeFileSync(credsFile, `Email: admin@toanvui.local\nMật khẩu: ${password}\n`);

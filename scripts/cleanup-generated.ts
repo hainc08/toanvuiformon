@@ -3,12 +3,12 @@
  * Run periodically (cron) on production:  npx tsx scripts/cleanup-generated.ts 90
  */
 import "dotenv/config";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createAdapter } from "../src/lib/db/adapter";
 import { PrismaClient } from "../src/generated/prisma/client";
 
 async function main() {
   const days = Math.max(7, Number(process.argv[2] ?? 90));
-  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+  const prisma = new PrismaClient({ adapter: createAdapter(process.env.DATABASE_URL) });
   try {
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     const res = await prisma.worksheet.deleteMany({ where: { kind: "GENERATED", createdAt: { lt: cutoff } } });

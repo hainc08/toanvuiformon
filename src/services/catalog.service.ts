@@ -1,3 +1,4 @@
+import { toStringArray } from "@/lib/db/json";
 import "server-only";
 import { cache } from "react";
 import { catalogRepository } from "@/repositories/catalog.repository";
@@ -16,7 +17,7 @@ export const getGradePage = cache(async (gradeSlug: string) => {
       title: c.title,
       slug: c.slug,
       summary: c.summary,
-      keyPoints: c.keyPoints,
+      keyPoints: toStringArray(c.keyPoints),
       topicCount: c._count.topics,
       worksheetCount: c._count.worksheets,
       questionCount: c._count.questions,

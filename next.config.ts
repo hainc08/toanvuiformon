@@ -26,7 +26,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   agentRules: false,
-  serverExternalPackages: ["playwright-core", "pg"],
+  serverExternalPackages: ["playwright-core", "mariadb"],
   // Font + KaTeX assets read from disk by the PDF renderer (src/lib/pdf/assets.ts).
   outputFileTracingIncludes: {
     "/api/worksheets/**": [

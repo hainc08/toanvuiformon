@@ -10,7 +10,7 @@
  */
 import "dotenv/config";
 import bcrypt from "bcryptjs";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { createAdapter } from "../src/lib/db/adapter";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { buildSnapshot } from "../src/features/questions/snapshot";
 import { CHAPTERS, CURRICULUM, GRADE_6 } from "./data/curriculum";
@@ -18,7 +18,7 @@ import { ALL_SEED_QUESTIONS } from "./data/questions";
 import { SEED_WORKSHEETS } from "./data/worksheets";
 import { assignCodes } from "./data/codes";
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
+const prisma = new PrismaClient({ adapter: createAdapter(process.env.DATABASE_URL) });
 
 const SOURCE_VERIFIED = "Toán Vui biên soạn — đáp án đã kiểm tra tự động";
 const SOURCE_PENDING = "Toán Vui biên soạn — chờ giáo viên duyệt";
