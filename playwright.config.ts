@@ -26,7 +26,7 @@ export default defineConfig({
     timeout: 60_000,
     env: {
       PORT: String(PORT),
-      HOSTNAME: "127.0.0.1",
+      BIND_HOST: "127.0.0.1",
       DATABASE_URL: dbUrl,
       SITE_URL: baseURL,
       SESSION_SECRET: "e2e-secret-0123456789abcdef0123456789",

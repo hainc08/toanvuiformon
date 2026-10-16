@@ -10,6 +10,9 @@ if (!existsSync(".next/standalone/server.js")) {
 }
 cpSync(".next/static", ".next/standalone/.next/static", { recursive: true });
 if (existsSync("public")) cpSync("public", ".next/standalone/public", { recursive: true });
-const child = spawn(process.execPath, ["server.js"], { cwd: `${root}/.next/standalone`, stdio: "inherit", env: process.env });
+// Hosting platforms (e.g. Hostinger) often export HOSTNAME=<machine name>, which the standalone
+// server would bind to. Listen on all interfaces unless BIND_HOST says otherwise.
+const childEnv = { ...process.env, HOSTNAME: process.env.BIND_HOST || "0.0.0.0" };
+const child = spawn(process.execPath, ["server.js"], { cwd: `${root}/.next/standalone`, stdio: "inherit", env: childEnv });
 for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => child.kill(sig));
 child.on("exit", (code) => process.exit(code ?? 0));

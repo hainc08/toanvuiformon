@@ -10,7 +10,7 @@
     "dev": "next dev",
     "local": "node scripts/dev-local.mjs",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/start-production.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project unit",
@@ -24,7 +24,8 @@
     "db:studio": "prisma studio",
     "admin:create": "tsx scripts/create-admin.ts",
     "cleanup:generated": "tsx scripts/cleanup-generated.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "postbuild": "node scripts/install-pdf-browser.mjs"
   },
   "dependencies": {
     "@fontsource/be-vietnam-pro": "^5.3.0",
