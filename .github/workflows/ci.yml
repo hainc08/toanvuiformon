@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint · Typecheck · Test · Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: toanvui
+          POSTGRES_PASSWORD: toanvui
+          POSTGRES_DB: toanvui_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U toanvui" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://toanvui:toanvui@localhost:5432/toanvui_ci?schema=public
+      TEST_DATABASE_URL: postgresql://toanvui:toanvui@localhost:5432/toanvui_test?schema=public
+      SESSION_SECRET: ci-only-secret-0123456789abcdef0123456789
+      SITE_URL: http://localhost:3000
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Create test database
+        run: PGPASSWORD=toanvui psql -h localhost -U toanvui -d toanvui_ci -c "CREATE DATABASE toanvui_test;"
+
+      - name: Apply migrations and check schema drift
+        run: |
+          npx prisma migrate deploy
+          npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+
+      - name: Seed (idempotency check — runs twice)
+        run: |
+          npm run db:seed
+          npm run db:seed
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium chromium-headless-shell
+
+      - name: Integration tests (DB + real PDF rendering)
+        run: npm run test:integration
+
+      - name: Build
+        run: npm run build
+
+      - name: E2E + security tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build runner image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runner
+          push: false
+          tags: toanvui:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build tools image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: tools
+          push: false
+          cache-from: type=gha

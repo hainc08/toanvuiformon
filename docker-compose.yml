@@ -1,0 +1,126 @@
+# Toán Vui — production stack for a Hostinger VPS (Docker).
+# Data lives in named volumes (pgdata, caddy_data) and ./backups — never removed on redeploy.
+# NEVER run `docker compose down -v` on production.
+name: toanvui
+
+x-db-env: &db-env
+  PGHOST: db
+  PGUSER: ${POSTGRES_USER:-toanvui}
+  PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+  PGDATABASE: ${POSTGRES_DB:-toanvui}
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-toanvui}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-toanvui}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [internal]
+
+  # Safety net: dump the database before applying migrations on every deploy.
+  backup-predeploy:
+    image: postgres:16-alpine
+    restart: "no"
+    environment: *db-env
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - mkdir -p /backups && pg_dump --format=custom --file=/backups/predeploy-$$(date +%Y%m%d-%H%M%S).dump && find /backups -name 'predeploy-*.dump' -mtime +30 -delete
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal]
+
+  migrate:
+    build:
+      context: .
+      target: tools
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-toanvui}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-toanvui}?schema=public
+      SEED_PUBLISH_VERIFIED: ${SEED_PUBLISH_VERIFIED:-true}
+    # Non-destructive: applies pending migrations, then the idempotent seed (never overwrites existing rows).
+    command: ["sh", "-c", "npx prisma migrate deploy && npx tsx prisma/seed.ts"]
+    depends_on:
+      backup-predeploy:
+        condition: service_completed_successfully
+    networks: [internal]
+
+  app:
+    build:
+      context: .
+      target: runner
+      args:
+        NODE_VERSION: 22.12-bookworm-slim
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-toanvui}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-toanvui}?schema=public
+      SITE_URL: ${SITE_URL:?SITE_URL is required, e.g. https://toanvui.vn}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required (>= 32 chars)}
+      TRUST_PROXY: "true"
+      PDF_MAX_CONCURRENCY: ${PDF_MAX_CONCURRENCY:-2}
+      APP_VERSION: ${APP_VERSION:-unknown}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    shm_size: "256mb"
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+    networks: [internal]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN is required, e.g. toanvui.vn}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    networks: [internal]
+
+  # Daily logical backup, 14-day retention (+ copy ./backups off-server, see DEPLOYMENT.md).
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment: *db-env
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          pg_dump --format=custom --file=/backups/daily-$$(date +%Y%m%d-%H%M%S).dump && echo "backup ok"
+          find /backups -name 'daily-*.dump' -mtime +14 -delete
+          sleep 86400
+        done
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal]
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:

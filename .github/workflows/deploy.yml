@@ -1,0 +1,87 @@
+name: Deploy (Hostinger VPS)
+
+# Deploys only after CI succeeded on main. Requires (Settings → Secrets and variables → Actions):
+#   secrets.HOSTINGER_API_KEY, vars.HOSTINGER_VM_ID, vars.PRODUCTION_URL
+#   secrets.POSTGRES_PASSWORD, secrets.SESSION_SECRET, vars.DOMAIN
+#   secrets.PERSONAL_ACCESS_TOKEN (only if the repository is private)
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push') }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Check required configuration
+        env:
+          HAS_API_KEY: ${{ secrets.HOSTINGER_API_KEY != '' }}
+          VM_ID: ${{ vars.HOSTINGER_VM_ID }}
+          URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          [ "$HAS_API_KEY" = "true" ] || { echo "::error::Missing secret HOSTINGER_API_KEY"; exit 1; }
+          [ -n "$VM_ID" ] || { echo "::error::Missing variable HOSTINGER_VM_ID"; exit 1; }
+          [ -n "$URL" ] || { echo "::error::Missing variable PRODUCTION_URL"; exit 1; }
+
+      - name: Deploy with Hostinger
+        uses: hostinger/deploy-action@v1
+        with:
+          api-key: ${{ secrets.HOSTINGER_API_KEY }}
+          virtual-machine: ${{ vars.HOSTINGER_VM_ID }}
+          project-name: toanvui
+          personal-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          docker-compose-path: docker-compose.yml
+          environment-variables: |
+            DOMAIN=${{ vars.DOMAIN }}
+            SITE_URL=${{ vars.PRODUCTION_URL }}
+            POSTGRES_USER=toanvui
+            POSTGRES_DB=toanvui
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            SESSION_SECRET=${{ secrets.SESSION_SECRET }}
+            APP_VERSION=${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Post-deploy health check
+        env:
+          URL: ${{ vars.PRODUCTION_URL }}
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          for i in $(seq 1 30); do
+            body=$(curl -fsS --max-time 10 "$URL/api/health" || true)
+            echo "attempt $i: $body"
+            if echo "$body" | grep -q '"status":"ok"' && echo "$body" | grep -q "$SHA"; then
+              echo "Healthy: version $SHA"; exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::Health check failed after deploy — see DEPLOYMENT.md § Rollback"; exit 1
+
+      - name: Smoke test
+        env:
+          URL: ${{ vars.PRODUCTION_URL }}
+        run: |
+          curl -fsS -o /dev/null "$URL/"
+          curl -fsS -o /dev/null "$URL/lop-6"
+          curl -fsS "$URL/api/worksheets?pageSize=1" | grep -q '"items"'
+          slug=$(curl -fsS "$URL/api/worksheets?pageSize=1" | sed -E 's/.*"slug":"([^"]+)".*/\1/')
+          curl -fsS -o /tmp/ws.pdf "$URL/api/worksheets/$slug/pdf" && head -c 5 /tmp/ws.pdf | grep -q '%PDF-'
+          echo "Smoke test passed"
+
+      - name: Summary
+        if: always()
+        run: echo "Deployed ${{ github.event.workflow_run.head_sha || github.sha }} to ${{ vars.PRODUCTION_URL }} — status ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
