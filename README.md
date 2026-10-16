@@ -29,6 +29,20 @@ npm run local
 
 Lệnh `local` tự khởi động PostgreSQL nhúng (dữ liệu lưu ở `.local-db/`), áp dụng migrations, nạp dữ liệu Toán 6, tạo tài khoản admin lần đầu (in ra màn hình, lưu ở `.local-db/admin-login.txt`), cài Chromium cho PDF nếu thiếu, rồi chạy http://localhost:3000. Dừng bằng `Ctrl+C`. Xóa thư mục `.local-db/` để làm lại từ đầu.
 
+> **Windows có nhiều bản Node:** kiểm tra `node -v` ≥ 22.12 trước khi `npm install` (file `.nvmrc` ghi `22`; `npm install` báo `EBADENGINE` nếu sai bản). Với nvm-windows: `nvm use 22`.
+>
+> `.local-db/` tạo trước bản này có thể dùng encoding WIN1252 (lỗi khi nạp tiếng Việt) — `npm run local` sẽ báo; khi đó xóa `.local-db/` rồi chạy lại.
+
+Chạy test tích hợp/E2E bằng chính PostgreSQL nhúng (trong lúc `npm run local` đang chạy):
+
+```bash
+# Tạo DB test một lần (cổng 5433, user postgres, mật khẩu trong .local-db/pg-password):
+#   CREATE DATABASE toanvui_test ENCODING 'UTF8' LOCALE_PROVIDER icu ICU_LOCALE 'und' LOCALE 'C' TEMPLATE template0;
+export TEST_DATABASE_URL="postgresql://postgres:$(cat .local-db/pg-password)@127.0.0.1:5433/toanvui_test?schema=public"
+npm run test:integration
+npm run build && npm run test:e2e
+```
+
 ## Chạy local với PostgreSQL riêng
 
 Yêu cầu: Node.js 22.12+ (≤ 24), PostgreSQL 16.
