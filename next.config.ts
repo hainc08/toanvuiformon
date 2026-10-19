@@ -27,6 +27,9 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   agentRules: false,
+  // Shared hosts cap threads/processes: Next would otherwise fork one build worker per visible CPU (60 on Hostinger)
+  // and die with "OS can't spawn worker thread". Override with BUILD_CPUS.
+  experimental: { cpus: Number(process.env.BUILD_CPUS) || 2 },
   serverExternalPackages: ["playwright-core", "mariadb"],
   // Font + KaTeX assets read from disk by the PDF renderer (src/lib/pdf/assets.ts).
   outputFileTracingIncludes: {
