@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "next dev",
     "local": "node scripts/dev-local.mjs",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "node scripts/start-production.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
