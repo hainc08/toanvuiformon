@@ -1,14 +1,16 @@
 name: Deploy (Hostinger VPS)
 
+# DISABLED: dự án chạy Hostinger Node.js + MySQL (xem HOSTINGER.md). Workflow này dành cho VPS + PostgreSQL và chưa chuyển sang MariaDB;
+# chỉ chạy tay (workflow_dispatch). Khôi phục trigger workflow_run bên dưới nếu quay lại Mode B.
 # Deploys only after CI succeeded on main. Requires (Settings → Secrets and variables → Actions):
 #   secrets.HOSTINGER_API_KEY, vars.HOSTINGER_VM_ID, vars.PRODUCTION_URL
 #   secrets.POSTGRES_PASSWORD, secrets.SESSION_SECRET, vars.DOMAIN
 #   secrets.PERSONAL_ACCESS_TOKEN (only if the repository is private)
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
+  # workflow_run:
+  #   workflows: [CI]
+  #   types: [completed]
+  #   branches: [main]
   workflow_dispatch:
 
 concurrency:
